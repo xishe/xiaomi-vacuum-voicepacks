@@ -10,14 +10,18 @@ from pathlib import Path
 import re
 import sys
 import tempfile
-from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile
+from zipfile import BadZipFile, ZIP_DEFLATED, ZIP_STORED, ZipFile
+import zlib
 
 from mutagen import MutagenError
 from mutagen.mp3 import MP3
 
 
 MANIFEST = "md5.ini"
-TRACK_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.mp3", re.I)
+TRACK_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.mp3", re.I | re.ASCII)
+RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL"} | {
+    f"{prefix}{number}" for prefix in ("COM", "LPT") for number in range(1, 10)
+}
 MAX_UNPACKED_BYTES = 256 * 1024 * 1024
 V19 = "ijai.vacuum.v19"
 
@@ -48,27 +52,46 @@ def audio_format(name, data):
     return AudioFormat(info.sample_rate, info.channels, info.layer)
 
 
+def valid_track_name(name):
+    return TRACK_NAME.fullmatch(name) is not None and name.split(".", 1)[0].upper() not in RESERVED_NAMES
+
+
+def read_member(archive, name):
+    try:
+        return archive.read(name)
+    except (zlib.error, NotImplementedError):
+        raise ValueError(f"{name}: повреждённый ZIP или неподдерживаемый режим сжатия.") from None
+
+
 def read_pack(path):
     if path.stat().st_size > MAX_UNPACKED_BYTES:
         raise ValueError("ZIP превышает лимит инструмента в 256 МиБ.")
     serialized = path.read_bytes()
     with ZipFile(BytesIO(serialized)) as archive:
         entries = archive.infolist()
+        if any(entry.filename != entry.orig_filename for entry in entries):
+            raise ValueError("В ZIP есть неоднозначные имена файлов.")
         names = [entry.filename for entry in entries]
         if len(set(map(str.casefold, names))) != len(names):
             raise ValueError("В ZIP повторяются имена файлов.")
         tracks = [name for name in names if name != MANIFEST]
-        if MANIFEST not in names or not tracks or any(not TRACK_NAME.fullmatch(name) for name in tracks):
+        if MANIFEST not in names or not tracks or any(not valid_track_name(name) for name in tracks):
             raise ValueError("Нужен ZIP с файлами MP3 и md5.ini в корне.")
+        if any(entry.flag_bits & 1 or entry.compress_type not in {ZIP_STORED, ZIP_DEFLATED} for entry in entries):
+            raise ValueError("Используйте ZIP с обычным сжатием Deflate или без сжатия и пароля.")
         if sum(entry.file_size for entry in entries) > MAX_UNPACKED_BYTES:
             raise ValueError("Распакованный ZIP превышает лимит инструмента в 256 МиБ.")
         config = ConfigParser(interpolation=None)
-        config.read_string(archive.read(MANIFEST).decode("utf-8-sig"))
+        try:
+            text = read_member(archive, MANIFEST).decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raise ValueError("Сохраните md5.ini в UTF-8.") from None
+        config.read_string(text)
         if set(config.sections()) != set(tracks) or config.defaults():
             raise ValueError("Секции md5.ini не совпадают с файлами в ZIP.")
         payload = {}
         for name in tracks:
-            payload[name] = archive.read(name)
+            payload[name] = read_member(archive, name)
             expected = config[name].get("md5", "").strip().lower()
             if expected != md5(payload[name]).hexdigest():
                 raise ValueError(f"{name}: контрольная сумма MD5 не совпадает.")
@@ -97,6 +120,10 @@ def compare_with_template(pack, template, model=None):
         ensure_audio(name, pack.formats[name], template.formats[name], model)
 
 
+def manifest_entry(name, checksum):
+    return f"[{name}]\nMD5={checksum}\n\n"
+
+
 def build(template_path, clips_dir, output, model=None):
     template = read_pack(template_path)
     replacements = {path.name: path for path in clips_dir.iterdir()
@@ -109,13 +136,22 @@ def build(template_path, clips_dir, output, model=None):
     if output.exists():
         raise ValueError("Укажите новое имя выходного ZIP.")
     tracks = template.tracks.copy()
+    unpacked_size = sum(len(manifest_entry(name, "0" * 32)) + len(data)
+                        for name, data in tracks.items())
     for name, path in replacements.items():
-        data = path.read_bytes()
+        remaining = MAX_UNPACKED_BYTES - unpacked_size + len(tracks[name])
+        if path.stat().st_size > remaining:
+            raise ValueError(f"{name}: пакет превысит лимит инструмента в 256 МиБ.")
+        with path.open("rb") as stream:
+            data = stream.read(remaining + 1)
+        if len(data) > remaining:
+            raise ValueError(f"{name}: пакет превысит лимит инструмента в 256 МиБ.")
         ensure_audio(name, audio_format(name, data), template.formats[name], model)
+        unpacked_size += len(data) - len(tracks[name])
         tracks[name] = data
 
     digest = {name: md5(data).hexdigest() for name, data in tracks.items()}
-    ini = "".join(f"[{name}]\nMD5={digest[name]}\n\n" for name in sorted(tracks, key=digest.get))
+    ini = "".join(manifest_entry(name, digest[name]) for name in sorted(tracks, key=digest.get))
     with tempfile.NamedTemporaryFile(dir=output.parent, delete=False) as handle:
         temporary = Path(handle.name)
     try:

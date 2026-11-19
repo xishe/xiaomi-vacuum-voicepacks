@@ -36,7 +36,10 @@ def verified_pack():
 
 
 def verified_custom_pack(path, template, model):
-    from voicepack import compare_with_template, read_pack
+    try:
+        from voicepack import compare_with_template, read_pack
+    except ImportError:
+        raise ValueError("Установите зависимости командой python -m pip install -r requirements.txt.") from None
 
     package = read_pack(path)
     compare_with_template(package, read_pack(template), model)
@@ -112,7 +115,7 @@ def handler_for(robot_ip, url_path, package, sent):
     return VoicePackHandler
 
 
-def install(device, robot_ip, package, locale, communication_error):
+def install(device, robot_ip, package, locale, communication_error, host_ip=None):
     status = robot_status(device)
     active, task, _progress = voice_status(device)
     print(f"Активный слот: {active}. Заряд: {status.get('battery', '?')}%.", flush=True)
@@ -127,9 +130,11 @@ def install(device, robot_ip, package, locale, communication_error):
     if locale == active:
         raise ValueError("Этот слот уже активен. Выберите второй слот или уберите --locale.")
 
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as route:
-        route.connect((robot_ip, 54321))
-        host = route.getsockname()[0]
+    if host_ip is None:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as route:
+            route.connect((robot_ip, 54321))
+            host_ip = route.getsockname()[0]
+    host = str(host_ip)
     url_path = f"/{secrets.token_hex(12)}.zip"
     sent = threading.Event()
     handler = handler_for(robot_ip, url_path, package, sent)
@@ -181,13 +186,22 @@ def main():
     parser.add_argument("--package", type=Path, help="файл собственного пакета")
     parser.add_argument("--template", type=Path, help="заводской ZIP для сверки своего пакета")
     parser.add_argument("--locale", choices=LOCALES, help="языковой слот для установки")
+    parser.add_argument("--host-ip", type=IPv4Address, help="локальный IPv4 компьютера для HTTP-загрузки")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="проверить ZIP на компьютере")
     mode.add_argument("--status", action="store_true", help="прочитать состояние без установки")
     options = parser.parse_args()
     if not options.check and options.ip is None:
         parser.error("укажите --ip либо выберите --check")
-    if options.package and not options.status:
+    if options.status and (options.package or options.template or options.locale or options.host_ip):
+        parser.error("--status читает состояние. Для установки пакета вызовите команду без --status.")
+    if options.check and (options.locale or options.host_ip):
+        parser.error("--locale и --host-ip нужны только для установки.")
+    if options.host_ip and (options.host_ip.is_unspecified or options.host_ip.is_multicast):
+        parser.error("--host-ip должен быть конкретным IPv4-адресом компьютера.")
+    if options.template and not options.package:
+        parser.error("--template используется вместе с --package.")
+    if options.package:
         if not options.template:
             parser.error("для --package укажите --template с заводским ZIP.")
         if not options.model and not options.check:
@@ -217,6 +231,8 @@ def main():
             detected = info.get("model")
             print(f"{detected}, прошивка {info.get('fw_ver')}.", flush=True)
             if options.status:
+                if options.model and detected != options.model:
+                    raise ValueError(f"Выбран профиль {options.model}, по указанному IP ответила модель {detected}.")
                 if detected not in PROFILES:
                     print("Модель определена. Её профиль отсутствует в локальном установщике.")
                     return 0
@@ -229,7 +245,7 @@ def main():
                     raise ValueError(f"Выбран профиль {selected}, по указанному IP ответила модель {detected}.")
                 if selected != MODEL:
                     print("Экспериментальный профиль, проверенный по спецификации MIoT.", flush=True)
-                install(device, ip, data, options.locale, DeviceException)
+                install(device, ip, data, options.locale, DeviceException, options.host_ip)
         except DeviceException:
             raise ValueError("Связь с роботом не подтверждена. Проверьте IP, токен и доступ по локальной сети.") from None
         return 0
