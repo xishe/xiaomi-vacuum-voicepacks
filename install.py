@@ -20,8 +20,8 @@ from zipfile import BadZipFile
 
 MODEL = "ijai.vacuum.v19"
 PROFILES = ("ijai.vacuum.v3", "ijai.vacuum.v17", "ijai.vacuum.v18", MODEL)
-PACK = Path(__file__).resolve().parent / "packs" / MODEL / "mop-2s-witcher-v4.1-v19.zip"
-PACK_SHA256 = "d90720903f48acc2a7157a9cdff7f3cc453c02a469b22c66c69fc06ff586245a"
+PACK = Path(__file__).resolve().parent / "packs" / MODEL / "witcher3-ru-ijai-v19-v1.0.zip"
+PACK_SHA256 = "2eb98479e768aefd234448d4479e93f40fd977d9d26a57378e52724f466bc14b"
 LOCALES = ("ru_RU", "fr_FR")
 DOWNLOAD_TIMEOUT = 105
 
@@ -31,7 +31,7 @@ def verified_pack():
         raise ValueError(f"Файл {PACK.name} должен быть в папке packs/{MODEL}.")
     data = PACK.read_bytes()
     if hashlib.sha256(data).hexdigest() != PACK_SHA256:
-        raise ValueError("SHA-256 не совпадает с контрольной суммой пакета V4.1.")
+        raise ValueError("SHA-256 не совпадает с контрольной суммой пакета 1.0.")
     return data
 
 

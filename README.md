@@ -1,10 +1,14 @@
-# Голосовые пакеты для роботов-пылесосов
+# Xiaomi Vacuum Voicepacks
 
-Инструменты для проверки и сборки голосовых ZIP-пакетов и локальной установки на модели Xiaomi/ijai с подходящим профилем MIoT. Готовый пакет **«Ведьмак 3» V4.1** содержит 108 звуков и проверен на **Xiaomi Robot Vacuum-Mop 2S (`ijai.vacuum.v19`), прошивка `4.3.3_0081`**. Реплики на русском, встречается ненормативная лексика.
+Инструменты для проверки и сборки голосовых ZIP-пакетов и локальной установки на модели Xiaomi/ijai с подходящим профилем MIoT.
+
+**«Ведьмак 3 RU · Mop 2S» 1.0** содержит 108 звуков. Реплики на русском, встречается ненормативная лексика. Локальная установка проверена на **Xiaomi Robot Vacuum-Mop 2S (`ijai.vacuum.v19`)** с прошивкой **`4.3.3_0081`**.
+
+Фанатский контент для личного использования. Права на игровые материалы принадлежат их правообладателям.
 
 | Задача | Что использовать |
 | --- | --- |
-| Установить готовый пакет на Mop 2S | [ZIP V4.1](packs/ijai.vacuum.v19/mop-2s-witcher-v4.1-v19.zip) · [карта 108 звуков](packs/ijai.vacuum.v19/PHRASES.md) |
+| Установить озвучку на Mop 2S | [Скачать «Ведьмак 3 RU» 1.0](packs/ijai.vacuum.v19/witcher3-ru-ijai-v19-v1.0.zip) · [карта реплик по событиям](packs/ijai.vacuum.v19/PHRASES.md) |
 | Установить ZIP или собрать озвучку на сайте | [Инструкция Mindsolo](docs/mindsolo.md) |
 | Собрать свой ZIP на компьютере | [Сборка из заводского шаблона](#сборка-своего-пакета) |
 | Проверить свой робот и установить по Wi‑Fi | [Совместимость моделей](docs/compatibility.md) · [локальная установка](#установка-по-локальной-сети) |
@@ -53,14 +57,14 @@ python3 -m venv .venv
 Чтобы послушать отдельные звуки или использовать их в конструкторе Mindsolo, извлеките MP3 в новую папку:
 
 ```sh
-python voicepack.py extract packs/ijai.vacuum.v19/mop-2s-witcher-v4.1-v19.zip extracted
+python voicepack.py extract packs/ijai.vacuum.v19/witcher3-ru-ijai-v19-v1.0.zip extracted
 ```
 
 ## Установка по локальной сети
 
 Подключите компьютер и робот к одной сети, поставьте робот на базу и найдите его локальный IPv4. Требуется 32-символьный miIO-токен именно этого робота. Установщик запрашивает его скрыто. Способ получения зависит от модели и аккаунта. [Документация python-miio по токенам](https://python-miio.readthedocs.io/en/latest/discovery.html#obtaining-tokens).
 
-**Готовый V4.1 для Mop 2S**
+**Готовый пакет 1.0 для Mop 2S**
 
 ```sh
 python install.py --check
@@ -92,7 +96,5 @@ python install.py --ip 192.168.1.50 --model ijai.vacuum.v19 --package custom.zip
 ## Источники
 
 - Русский игровой дубляж **The Witcher 3: Wild Hunt**, CD PROJEKT RED. Для подбора использовались [WitchSpeech](https://huggingface.co/datasets/korovsky/witchspeech) и [аудиоархив Rootreck](https://huggingface.co/datasets/Rootreck/so-vits-svc-4.0-ru-The_Witcher_3_Wild_Hunt).
-- Вставка для поиска робота взята из [игровой вырезки](https://rutube.ru/video/aef7cffc7dcee229bd5885a755c032fc/). Короткий сигнал `sound_beep_beep.mp3` взят из штатного пакета Xiaomi.
+- Короткий сигнал `sound_beep_beep.mp3` взят из штатного пакета Xiaomi.
 - Описание совместимости опирается на спецификации Xiaomi MIoT, [проект Q0/ijai.vacuum](https://github.com/Q0/ijai.vacuum) и [документацию Mindsolo](https://vacuum.mindsolo.net/info/create-voicepack).
-
-Это фанатская сборка. Для модификаций с материалами игры, предназначенных для другого сервиса, CD PROJEKT RED просит предварительное согласование. [Условия использования фанатского контента](https://www.cdprojektred.com/en/fan-content).
